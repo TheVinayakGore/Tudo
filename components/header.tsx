@@ -82,7 +82,7 @@ export default function Header() {
   ];
 
   return (
-    <header className="fixed top-0 shadow w-full z-50">
+    <header className="fixed top-0 shadow w-full z-[100]">
       <div className="flex h-16 px-5 lg:px-20 items-center justify-between bg-white/20 dark:bg-zinc-800/20 backdrop-blur-xl w-full">
         {/* Logo */}
         <Link
@@ -175,7 +175,7 @@ export default function Header() {
               <div className="flex justify-center gap-2 mb-4">
                 <button
                   onClick={() => setFormMode("todo")}
-                  className={`px-4 py-1 rounded-md font-medium transition w-full ${
+                  className={`px-4 py-1 rounded-md font-medium transition cursor-pointer w-full ${
                     formMode === "todo"
                       ? "bg-orange-500 text-white"
                       : "bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300"
@@ -185,7 +185,7 @@ export default function Header() {
                 </button>
                 <button
                   onClick={() => setFormMode("note")}
-                  className={`px-4 py-1 rounded-md font-medium transition w-full ${
+                  className={`px-4 py-1 rounded-md font-medium transition cursor-pointer w-full ${
                     formMode === "note"
                       ? "bg-orange-500 text-white"
                       : "bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300"
