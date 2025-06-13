@@ -95,7 +95,7 @@ const useNoteStore = create<NoteStore>()(
   )
 );
 
-const Page = () => {
+const Todos = () => {
   const {
     todos,
     toggleTodo,
@@ -133,20 +133,20 @@ const Page = () => {
   );
   const [showNoteForm, setShowNoteForm] = useState(false);
 
-  // Add useEffect to save page state
+  // Add useEffect to save Todos state
   useEffect(() => {
-    const pageState = {
+    const TodosState = {
       selectedMonth,
       monthViewType,
       showSubTodoForm,
       showNoteForm,
     };
-    localStorage.setItem("todoPageState", JSON.stringify(pageState));
+    localStorage.setItem("todoTodosState", JSON.stringify(TodosState));
   }, [selectedMonth, monthViewType, showSubTodoForm, showNoteForm]);
 
-  // Add useEffect to restore page state
+  // Add useEffect to restore Todos state
   useEffect(() => {
-    const savedState = localStorage.getItem("todoPageState");
+    const savedState = localStorage.getItem("todoTodosState");
     if (savedState) {
       const {
         selectedMonth: savedMonth,
@@ -354,7 +354,7 @@ const Page = () => {
   // Clear localStorage when component unmounts
   useEffect(() => {
     return () => {
-      localStorage.removeItem("todoPageState");
+      localStorage.removeItem("todoTodosState");
       localStorage.removeItem("todoFormStates");
       localStorage.removeItem("todoEditingStates");
       localStorage.removeItem("todoSelectedStates");
@@ -398,44 +398,44 @@ const Page = () => {
     return false;
   };
 
-  // Add this effect to set default date when month changes
+  // Add useEffect to set default date when month changes
   useEffect(() => {
     if (selectedMonth) {
       const monthIndex = months.indexOf(selectedMonth);
+      const currentYear = new Date().getFullYear();
       const currentDate = new Date();
       const currentMonth = currentDate.getMonth();
-      const currentYear = currentDate.getFullYear();
 
       // If selected month is current month, use current date
-      if (monthIndex === currentMonth) {
-        setNewNoteDate(currentDate);
-        setNewTodoDate(currentDate);
-      } else {
-        // For other months, use first day of the month
-        const firstDayOfMonth = new Date(currentYear, monthIndex, 1);
-        setNewNoteDate(firstDayOfMonth);
-        setNewTodoDate(firstDayOfMonth);
-      }
+      // Otherwise use first day of the selected month
+      const defaultDate =
+        monthIndex === currentMonth
+          ? currentDate
+          : new Date(currentYear, monthIndex, 1);
+
+      setNewNoteDate(defaultDate);
+      setNewTodoDate(defaultDate);
+      setEditNoteDate(defaultDate);
     }
   }, [selectedMonth, months]);
 
-  // Sort todos by date (newest first)
-  const sortedTodos = [...todos].sort((a, b) => {
-    const dateA = new Date(a.dueDate || a.createdAt).getTime();
-    const dateB = new Date(b.dueDate || b.createdAt).getTime();
-    return dateB - dateA;
-  });
+  // Add function to get default month for calendar
+  const getDefaultMonth = () => {
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth();
 
-  const filteredTodos = selectedMonth
-    ? sortedTodos.filter(
-        (todo) =>
-          new Date(todo.dueDate || todo.createdAt).toLocaleString("default", {
-            month: "long",
-          }) === selectedMonth
-      )
-    : sortedTodos;
+    if (selectedMonth) {
+      const monthIndex = months.indexOf(selectedMonth);
+      // If selected month is current month, use current date
+      // Otherwise use first day of the selected month
+      return monthIndex === currentMonth
+        ? currentDate
+        : new Date(currentDate.getFullYear(), monthIndex, 1);
+    }
+    return currentDate;
+  };
 
-  // Add this function to clear all forms
+  // Modify the clearAllForms function to reset date
   const clearAllForms = () => {
     setNewTodoText("");
     setNewTodoDesc("");
@@ -447,31 +447,36 @@ const Page = () => {
     setEditSubTodoText("");
   };
 
-  // Add this function to handle todo editing
-  const handleEditTodo = (todo: Todo) => {
-    setEditingTodo(todo);
-    setNewTodoText(todo.title);
-    setNewTodoDesc(todo.description || "");
-    setNewTodoDate(todo.dueDate ? new Date(todo.dueDate) : new Date());
-    if (todo.subTodos && todo.subTodos.length > 0) {
-      setSubTodoInputs(todo.subTodos.map((st) => st.title));
-      setShowSubTodoForm(true);
-    }
-  };
-
-  // Add this function to handle subtodo editing
-  const handleEditSubTodo = (
-    todoId: string,
-    subTodoId: string,
-    currentTitle: string
-  ) => {
-    setEditingSubTodo({ todoId, subTodoId });
-    setEditSubTodoText(currentTitle);
-  };
-
   // Modify the handleAddTodo function
   const handleAddTodo = () => {
-    if (!newTodoText.trim()) return;
+    if (!newTodoText.trim()) {
+      toast.error("Please enter a title for your todo!", {
+        duration: 3000,
+      });
+      return;
+    }
+
+    if (!newTodoDate) {
+      toast.error("Please select a date for your todo!", {
+        duration: 3000,
+      });
+      return;
+    }
+
+    // Check if there's already a todo on the selected date, but only for new todos
+    if (!editingTodo && newTodoDate && hasTodoOnDate(newTodoDate)) {
+      toast.error(
+        "This date already has 1 todo so you can't add the another one for the same date. Or you can add the sub-todos for that same date, it's allowed !",
+        {
+          duration: 3000,
+          style: {
+            maxWidth: "500px",
+            whiteSpace: "pre-wrap",
+          },
+        }
+      );
+      return;
+    }
 
     const newTodo = {
       title: newTodoText,
@@ -497,23 +502,141 @@ const Page = () => {
         dueDate: newTodoDate?.toISOString(),
         subTodos: newTodo.subTodos,
       });
+      toast.success("Todo updated successfully!");
     } else {
       // Add new todo
       addTodo(newTodo);
+      toast.success("Todo added successfully!");
     }
 
     clearAllForms();
   };
 
+  // Update the handleEditTodo function
+  const handleEditTodo = (todo: Todo) => {
+    setEditingTodo(todo);
+    setNewTodoText(todo.title);
+    setNewTodoDesc(todo.description || "");
+    setNewTodoDate(todo.dueDate ? new Date(todo.dueDate) : new Date());
+    if (todo.subTodos && todo.subTodos.length > 0) {
+      setSubTodoInputs(todo.subTodos.map((st) => st.title));
+      setShowSubTodoForm(true);
+    }
+  };
+
+  // Add effect to reset date when showSubTodoForm changes
+  useEffect(() => {
+    if (!showSubTodoForm) {
+      setNewTodoDate(new Date());
+    }
+  }, [showSubTodoForm]);
+
+  // Sort todos by date (newest first)
+  const sortedTodos = [...todos].sort((a, b) => {
+    const dateA = new Date(a.dueDate || a.createdAt).getTime();
+    const dateB = new Date(b.dueDate || b.createdAt).getTime();
+    return dateB - dateA;
+  });
+
+  const filteredTodos = selectedMonth
+    ? sortedTodos.filter(
+        (todo) =>
+          new Date(todo.dueDate || todo.createdAt).toLocaleString("default", {
+            month: "long",
+          }) === selectedMonth
+      )
+    : sortedTodos;
+
+  // Add this function to handle subtodo editing
+  const handleEditSubTodo = (
+    todoId: string,
+    subTodoId: string,
+    currentTitle: string
+  ) => {
+    if (!editSubTodoText.trim()) {
+      toast.error("Please enter some text for your sub-todo!", {
+        duration: 3000,
+      });
+      return;
+    }
+
+    setEditingSubTodo({ todoId, subTodoId });
+    setEditSubTodoText(currentTitle);
+  };
+
+  // Add this function to check for duplicate todos on the same date
+  const hasTodoOnDate = (date: Date) => {
+    return todos.some((todo) => {
+      const todoDate = new Date(todo.dueDate || todo.createdAt);
+      return (
+        todoDate.getFullYear() === date.getFullYear() &&
+        todoDate.getMonth() === date.getMonth() &&
+        todoDate.getDate() === date.getDate()
+      );
+    });
+  };
+
   // Update the note handling functions
   const handleAddNote = () => {
-    if (!newNoteText.trim()) return;
+    if (!newNoteText.trim()) {
+      toast.error("Please enter some text for your note!", {
+        duration: 3000,
+      });
+      return;
+    }
+
+    if (!newNoteDate) {
+      toast.error("Please select a date for your note!", {
+        duration: 3000,
+      });
+      return;
+    }
+
     addNote({
       text: newNoteText,
       createdAt: (newNoteDate ?? new Date()).toISOString(),
     });
     setNewNoteText("");
     setNewNoteDate(new Date());
+    setShowNoteForm(false);
+    toast.success("Note added successfully!");
+  };
+
+  // Update the handleEditNote function
+  const handleEditNote = (note: Note) => {
+    if (!editNoteText.trim()) {
+      toast.error("Please enter some text for your note!", {
+        duration: 3000,
+      });
+      return;
+    }
+
+    if (!editNoteDate) {
+      toast.error("Please select a date for your note!", {
+        duration: 3000,
+      });
+      return;
+    }
+
+    editNote(note.id, {
+      text: editNoteText,
+      createdAt: editNoteDate.toISOString(),
+    });
+    setEditingNote(null);
+    setEditNoteText("");
+    setEditNoteDate(new Date());
+    toast.success("Note updated successfully!");
+  };
+
+  // Add function to handle note form close
+  const handleNoteFormClose = () => {
+    if (newNoteText.trim()) {
+      toast.error("Please save or clear your note before closing!", {
+        duration: 3000,
+      });
+      return;
+    }
+    setShowNoteForm(false);
   };
 
   function formatDateTime(date: string | Date) {
@@ -553,7 +676,7 @@ const Page = () => {
 
   return (
     <>
-      <main className="flex flex-col items-start justify-start m-auto gap-5 px-5 md:px-10 py-24 w-full">
+      <main id="todos" className="flex flex-col items-start gap-5 py-20 w-full">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-5 w-full">
           <div className="text-lg sm:text-2xl md:text-4xl font-medium">
             {selectedMonth ? (
@@ -743,13 +866,9 @@ const Page = () => {
                         />
                         <Button
                           size="sm"
-                          onClick={() => {
-                            handleAddNote();
-                            setShowNoteForm(false);
-                          }}
+                          onClick={handleAddNote}
                           className="absolute bottom-0 right-0 m-2 text-xs w-auto"
                         >
-                          {" "}
                           Save Note
                         </Button>
                       </div>
@@ -775,13 +894,13 @@ const Page = () => {
                                 setNewNoteDate(date)
                               }
                               initialFocus
-                              defaultMonth={newNoteDate}
+                              defaultMonth={getDefaultMonth()}
                             />
                           </PopoverContent>
                         </Popover>
 
                         {showNoteForm && (
-                          <Button onClick={() => setShowNoteForm(false)}>
+                          <Button onClick={handleNoteFormClose}>
                             Hide Form
                             <VscEyeClosed className="h-4 w-4" />
                           </Button>
@@ -805,6 +924,7 @@ const Page = () => {
                           onKeyDown={(e) =>
                             e.key === "Enter" && handleAddTodo()
                           }
+                          required
                         />
                         <Button
                           variant="outline"
@@ -845,7 +965,7 @@ const Page = () => {
                               setNewTodoDate(date)
                             }
                             initialFocus
-                            defaultMonth={newTodoDate}
+                            defaultMonth={getDefaultMonth()}
                             disabled={(date) => {
                               const today = new Date();
                               today.setHours(0, 0, 0, 0);
@@ -855,44 +975,7 @@ const Page = () => {
                         </PopoverContent>
                       </Popover>
 
-                      <Button
-                        onClick={() => {
-                          if (!newTodoText.trim()) return;
-
-                          const newTodo = {
-                            title: newTodoText,
-                            description: newTodoDesc,
-                            completed: false,
-                            createdAt: new Date(),
-                            dueDate: newTodoDate,
-                            subTodos: subTodoInputs
-                              .filter((subTodo) => subTodo.trim())
-                              .map((subTodo) => ({
-                                id: Date.now().toString() + Math.random(),
-                                title: subTodo,
-                                completed: false,
-                                createdAt: new Date(),
-                              })),
-                          };
-
-                          if (editingTodo) {
-                            // Update existing todo with subtodos
-                            updateTodo(editingTodo.id, {
-                              title: newTodoText,
-                              description: newTodoDesc,
-                              dueDate: newTodoDate?.toISOString(),
-                              subTodos: newTodo.subTodos,
-                            });
-                          } else {
-                            // Add new todo
-                            addTodo(newTodo);
-                          }
-
-                          // Clear all forms
-                          clearAllForms();
-                        }}
-                        className="flex-1 gap-1"
-                      >
+                      <Button onClick={handleAddTodo} className="flex-1 gap-1">
                         <IoAdd className="h-4 w-4" />{" "}
                         {editingTodo ? "Update" : "Add"}
                       </Button>
@@ -996,7 +1079,7 @@ const Page = () => {
                     }
 
                     // Group todos by week
-                    const todosByWeek: Todo[][] = [[], [], [], []];
+                    const todosByWeek: Todo[][] = [[], [], [], [], []];
                     filteredTodos.forEach((todo) => {
                       const dueDate = new Date(todo.dueDate || todo.createdAt);
                       const firstDayOfMonth = new Date(
@@ -1008,22 +1091,16 @@ const Page = () => {
                       const weekNumber = Math.floor(
                         (firstDayOfMonth.getDay() + dayOfMonth - 1) / 7
                       );
-                      const weekIndex = Math.min(weekNumber, 3);
+                      const weekIndex = Math.min(weekNumber, 4);
                       todosByWeek[weekIndex].push(todo);
                     });
 
-                    // Function to get day of week (0 = Monday, 6 = Sunday)
-                    const getDayOfWeek = (date: Date) => {
-                      const day = date.getDay();
-                      return day === 0 ? 6 : day - 1; // Convert Sunday (0) to 6, others shift by -1
-                    };
-
-                    // Sort todos within each week by day of week
+                    // Sort todos within each week by date
                     todosByWeek.forEach((weekTodos) => {
                       weekTodos.sort((a, b) => {
                         const dateA = new Date(a.dueDate || a.createdAt);
                         const dateB = new Date(b.dueDate || b.createdAt);
-                        return getDayOfWeek(dateA) - getDayOfWeek(dateB);
+                        return dateA.getTime() - dateB.getTime();
                       });
                     });
 
@@ -1072,8 +1149,12 @@ const Page = () => {
                     };
 
                     return (
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
                         {todosByWeek.map((weekTodos, weekIndex) => {
+                          // Only show week cards that have todos or are not the last empty week
+                          if (weekTodos.length === 0 && weekIndex === 4)
+                            return null;
+
                           const expired = isWeekExpired(weekIndex, weekTodos);
                           return (
                             <TooltipProvider key={weekIndex}>
@@ -1128,8 +1209,17 @@ const Page = () => {
                                           >
                                             <div className="flex items-ceneter w-full">
                                               <div
-                                                className={`flex items-center justify-center text-white text-xs font-bold rounded-l-md w-10 ${getDayColor(getDayInitial(new Date(todo.dueDate || todo.createdAt)))}`}
+                                                className={`flex flex-col items-center justify-center text-white text-xs font-bold rounded-l-md w-12 ${getDayColor(getDayInitial(new Date(todo.dueDate || todo.createdAt)))}`}
                                               >
+                                                <span className="text-base">
+                                                  {format(
+                                                    new Date(
+                                                      todo.dueDate ||
+                                                        todo.createdAt
+                                                    ),
+                                                    "d"
+                                                  )}
+                                                </span>
                                                 {getDayInitial(
                                                   new Date(
                                                     todo.dueDate ||
@@ -1169,7 +1259,7 @@ const Page = () => {
                                                           : ""
                                                       } overflow-auto`}
                                                     >
-                                                      {todo.title.slice(0, 30)}
+                                                      {todo.title.slice(0, 25)}
                                                       ...
                                                     </span>
                                                     {todo.description && (
@@ -1281,20 +1371,14 @@ const Page = () => {
                                           setEditNoteDate(date)
                                         }
                                         initialFocus
-                                        defaultMonth={editNoteDate}
+                                        defaultMonth={getDefaultMonth()}
                                       />
                                     </PopoverContent>
                                   </Popover>
                                   <Button
                                     onClick={() => {
                                       if (editNoteText.trim() && editNoteDate) {
-                                        editNote(note.id, {
-                                          text: editNoteText,
-                                          createdAt: editNoteDate.toISOString(),
-                                        });
-                                        setEditingNote(null);
-                                        setEditNoteText("");
-                                        setEditNoteDate(new Date());
+                                        handleEditNote(note);
                                       }
                                     }}
                                     className="w-full sm:w-40"
@@ -1671,4 +1755,4 @@ const Page = () => {
   );
 };
 
-export default Page;
+export default Todos;

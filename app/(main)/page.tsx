@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import ProgressGraph from "@/components/progress-graph";
 import Link from "next/link";
 import NotesPage from "@/components/Note";
+import Todos from "@/components/todos";
 
 export default function HomePage() {
   return (
@@ -26,6 +27,15 @@ export default function HomePage() {
       <section id="stats" className="py-20">
         <ProgressGraph />
       </section>
+
+      <hr />
+
+      {/* Todos Section */}
+      <section id="stats" className="">
+        <Todos />
+      </section>
+
+      <hr />
 
       {/* Features Section */}
       <section id="features" className="py-20">

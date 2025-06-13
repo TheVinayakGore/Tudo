@@ -14,6 +14,7 @@ export interface Todo {
   dueTime?: string; // ✅ new field
   subTodos?: Todo[]; // Add support for sub-todos
   parentId?: string; // Reference to parent todo if this is a sub-todo
+  isPlaceholder?: boolean;
 }
 
 type TodoStore = {

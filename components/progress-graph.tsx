@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { Line, Pie } from "react-chartjs-2";
+import { Line } from "react-chartjs-2";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -10,10 +10,8 @@ import {
   Title,
   Tooltip,
   Legend,
-  ArcElement,
   TooltipItem,
 } from "chart.js";
-import { Context } from "chartjs-plugin-datalabels";
 import { useTodoStore } from "@/store/todo-store";
 import { useTheme } from "next-themes";
 import { Button } from "./ui/button";
@@ -25,7 +23,6 @@ ChartJS.register(
   LinearScale,
   PointElement,
   LineElement,
-  ArcElement,
   Title,
   Tooltip,
   Legend
@@ -37,109 +34,58 @@ export default function ProgressGraph() {
   const [labels, setLabels] = useState<string[]>([]);
   const { todos } = useTodoStore();
 
-  // 📈 Line Graph: Weekly Completion %
+  // 📈 Line Graph: Yearly Completion %
   useEffect(() => {
-    const days = 7;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
+    const currentYear = new Date().getFullYear();
 
-    const dateLabels = Array.from({ length: days }, (_, i) => {
-      const date = new Date(today);
-      date.setDate(date.getDate() - (days - 1 - i));
-      return date.toLocaleDateString("en-US", { weekday: "short" });
-    });
-
-    const datePoints = dateLabels.map((_, i) => {
-      const date = new Date(today);
-      date.setDate(date.getDate() - (days - 1 - i));
-      return date;
-    });
-
-    const completionRates = datePoints.map((date) => {
-      const startOfDay = new Date(date);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(date);
-      endOfDay.setHours(23, 59, 59, 999);
-
-      const todosOnDay = todos.filter(
-        (todo) => new Date(todo.createdAt) <= endOfDay
+    const completionRates = months.map((_, monthIndex) => {
+      const startOfMonth = new Date(currentYear, monthIndex, 1);
+      const endOfMonth = new Date(
+        currentYear,
+        monthIndex + 1,
+        0,
+        23,
+        59,
+        59,
+        999
       );
 
-      if (todosOnDay.length === 0) return 0;
+      const todosInMonth = todos.filter((todo) => {
+        const todoDate = new Date(todo.createdAt);
+        return todoDate >= startOfMonth && todoDate <= endOfMonth;
+      });
 
-      const completedOnDay = todosOnDay.filter(
+      if (todosInMonth.length === 0) return 0;
+
+      const completedInMonth = todosInMonth.filter(
         (todo) =>
           todo.completed &&
           todo.completedAt &&
-          new Date(todo.completedAt) <= endOfDay
+          new Date(todo.completedAt) <= endOfMonth
       );
 
-      return Math.round((completedOnDay.length / todosOnDay.length) * 100);
+      return Math.round((completedInMonth.length / todosInMonth.length) * 100);
     });
 
-    setLabels(dateLabels);
+    setLabels(months.map((month) => `${month} ${currentYear}`));
     setCompletionData(completionRates);
   }, [todos]);
 
-  // 📊 Pie Chart Data
-  const currentYear = new Date().getFullYear();
-  const yearlyTodos = todos.filter(
-    (todo) => new Date(todo.createdAt).getFullYear() === currentYear
-  );
-  const completedThisYear = yearlyTodos.filter((todo) => todo.completed);
-  const pendingTodos = todos.filter((todo) => !todo.completed);
-
-  const completedPieData = {
-    labels: ["Completed", "Incomplete"],
-    datasets: [
-      {
-        label: "Yearly Todos",
-        data: [
-          completedThisYear.length,
-          yearlyTodos.length - completedThisYear.length,
-        ],
-        backgroundColor: ["#22c55e", "#f97316"],
-        borderWidth: 1,
-      },
-    ],
-  };
-
-  const pendingPieData = {
-    labels: ["Pending", "Completed"],
-    datasets: [
-      {
-        label: "Current Todos",
-        data: [pendingTodos.length, todos.length - pendingTodos.length],
-        backgroundColor: ["#f43f5e", "#3b82f6"],
-        borderWidth: 1,
-      },
-    ],
-  };
-
-  const pieOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: "bottom" as const,
-      },
-      datalabels: {
-        color: "#fff",
-        font: {
-          weight: "bold" as const,
-        },
-        formatter: (value: number, context: Context) => {
-          const dataset = context.chart.data.datasets[0].data as number[];
-          const total = dataset.reduce(
-            (sum: number, val: number) => sum + (val || 0),
-            0
-          );
-          const percentage = ((value / total) * 100).toFixed(0);
-          return `${percentage}%`;
-        },
-      },
-    },
-  };
+  const isDark = theme === "dark";
 
   const lineChartData = {
     labels,
@@ -155,8 +101,6 @@ export default function ProgressGraph() {
     ],
   };
 
-  const isDark = theme === "dark";
-
   const lineOptions = {
     responsive: true,
     plugins: {
@@ -167,11 +111,23 @@ export default function ProgressGraph() {
             `${context.dataset.label}: ${context.raw}%`,
         },
       },
+      datalabels: {
+        display: true,
+        color: isDark ? "#fff" : "#000",
+        font: {
+          weight: "bold",
+        },
+        formatter: (value: number) => `${value}%`,
+      },
     },
     scales: {
       x: {
         grid: {
-          color: isDark ? "#262626" : "#e5e7eb", // slate-700 vs gray-200
+          color: isDark ? "#262626" : "#e5e7eb",
+        },
+        ticks: {
+          maxRotation: 45,
+          minRotation: 45,
         },
       },
       y: {
@@ -199,7 +155,7 @@ export default function ProgressGraph() {
               className="p-3 lg:p-5 text-sm lg:text-base font-medium"
               asChild
             >
-              <Link href="/todos">
+              <Link href="/#todos">
                 <IoFilter className="mr-2" /> Manage Todos
               </Link>
             </Button>
@@ -258,38 +214,20 @@ export default function ProgressGraph() {
         </section>
 
         <h2 className="text-start mx-auto text-2xl md:text-4xl font-bold w-full">
-          Weekly Graph
+          <span className="text-primary">{new Date().getFullYear()}</span> Progress 
         </h2>
 
-        <div className="flex flex-col xl:flex-row gap-10 bg-orange-50 dark:bg-orange-900/10 p-10 rounded-xl border border-orange-300 dark:border-orange-950 w-full">
-          <section className="w-full xl:w-1/2">
-            <p className="text-xs lg:text-sm text-orange-500">Graph</p>
-            <Line options={lineOptions} data={lineChartData} />
-          </section>
-
-          {/* Pie Charts Section */}
-          <section className="grid grid-cols-1 lg:grid-cols-2 gap-20 lg:gap-0 py-10 xl:py-0 w-full xl:w-1/2">
-            <div className="flex flex-col items-center text-center gap-5 w-full h-60 xl:h-80">
-              <h4 className="text-lg font-semibold text-rose-500">
-                Pending Todos
-              </h4>
-              <div className="w-full h-full">
-                <Pie data={pendingPieData} options={pieOptions} />
-              </div>
-            </div>
-
-            <div className="flex flex-col items-center text-center gap-5 w-full h-60 xl:h-80">
-              <h4 className="text-lg font-semibold text-green-600">
-                Completed Todos
-              </h4>
-              <div className="w-full h-full">
-                <Pie data={completedPieData} options={pieOptions} />
-              </div>
+        <div className="bg-orange-50 dark:bg-orange-900/10 p-3 sm:p-10 rounded-lg border border-orange-300 dark:border-orange-950 w-full">
+          <section className="w-full">
+            <p className="text-xs lg:text-sm text-orange-500 mb-4">
+              Monthly Completion Rate for {new Date().getFullYear()}
+            </p>
+            <div className="w-full h-56 sm:h-full">
+              <Line options={lineOptions} data={lineChartData} />
             </div>
           </section>
         </div>
       </main>
-      <div className="flex w-full">hello</div>
     </>
   );
 }
