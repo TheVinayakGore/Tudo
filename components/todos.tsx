@@ -628,9 +628,6 @@ const Todos = () => {
       year: "numeric" as const,
       month: "short" as const,
       day: "numeric" as const,
-      hour: "numeric" as const,
-      minute: "2-digit" as const,
-      hour12: true,
     };
 
     return d.toLocaleString(undefined, options);
@@ -1035,16 +1032,11 @@ const Todos = () => {
                                                   percentageWorkDone.toFixed(
                                                     1
                                                   ) +
-                                                  "% hrs)".replace(
-                                                    /'/g,
-                                                    "&apos;"
-                                                  )}
+                                                  "%)".replace(/'/g, "&apos;")}
                                               </span>
                                             );
                                           } else if (expired) {
-                                            return (
-                                              ""
-                                            );
+                                            return "";
                                           }
                                           return null;
                                         })(totalWorkHours, expired)}
@@ -1054,151 +1046,198 @@ const Todos = () => {
                                     {/* Scrollable todos list with grow behavior */}
                                     <div className="flex-1 overflow-auto p-2 space-y-2">
                                       {weekTodos.length > 0 ? (
-                                        weekTodos.map((todo) => (
-                                          <div
-                                            key={todo.id}
-                                            className={`flex flex-col gap-2 rounded-lg border ${
-                                              getDayInitial(
-                                                new Date(
-                                                  todo.dueDate || todo.createdAt
-                                                )
-                                              ) === "SUN"
-                                                ? "border-emerald-300 dark:border-emerald-950 bg-emerald-100/30 hover:bg-emerald-100/70 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/70"
-                                                : "bg-white dark:bg-black hover:bg-zinc-50 dark:hover:bg-zinc-900"
-                                            } cursor-pointer`}
-                                            onClick={() =>
-                                              setSelectedTodo(todo)
+                                        (() => {
+                                          const todosByDay: {
+                                            [key: string]: Todo[];
+                                          } = {};
+                                          weekTodos.forEach((todo) => {
+                                            const dateKey = format(
+                                              new Date(
+                                                todo.dueDate || todo.createdAt
+                                              ),
+                                              "yyyy-MM-dd"
+                                            );
+                                            if (!todosByDay[dateKey]) {
+                                              todosByDay[dateKey] = [];
                                             }
-                                          >
-                                            <div className="flex items-ceneter w-full">
-                                              <div
-                                                className={`flex flex-col items-center justify-center text-white text-xs font-bold rounded-l-md w-12 ${getDayColor(getDayInitial(new Date(todo.dueDate || todo.createdAt)))}`}
-                                              >
-                                                <span className="text-base">
-                                                  {format(
-                                                    new Date(
-                                                      todo.dueDate ||
-                                                        todo.createdAt
-                                                    ),
-                                                    "d"
-                                                  )}
-                                                  
-                                                </span>
-                                                {getDayInitial(
-                                                  new Date(
-                                                    todo.dueDate ||
-                                                      todo.createdAt
-                                                  )
-                                                )}
-                                                
-                                              </div>
-                                              <div className="flex items-center justify-between p-2 sm:p-3 w-full">
-                                                <div className="flex items-center gap-2">
-                                                  <div
-                                                    onClick={(e) =>
-                                                      e.stopPropagation()
-                                                    }
-                                                  >
-                                                    <Checkbox
-                                                      checked={todo.completed}
-                                                      onCheckedChange={(
-                                                        checked
-                                                      ) => {
-                                                        if (checked) {
-                                                          setSelectedTodoForWorkHours(
-                                                            todo
-                                                          );
-                                                          setShowWorkHoursDialog(
-                                                            true
-                                                          );
-                                                        } else {
-                                                          toggleTodo(todo.id);
-                                                        }
-                                                      }}
-                                                      className={`border ${
+                                            todosByDay[dateKey].push(todo);
+                                          });
+
+                                          const sortedDailyKeys = Object.keys(
+                                            todosByDay
+                                          ).sort(
+                                            (a, b) =>
+                                              new Date(a).getTime() -
+                                              new Date(b).getTime()
+                                          );
+
+                                          return sortedDailyKeys.map(
+                                            (dateKey) => {
+                                              const dailyTodos =
+                                                todosByDay[dateKey];
+
+                                              return (
+                                                <React.Fragment key={dateKey}>
+                                                  {dailyTodos.map((todo) => (
+                                                    <div
+                                                      key={todo.id}
+                                                      className={`flex flex-col gap-2 rounded-lg border ${
                                                         getDayInitial(
                                                           new Date(
                                                             todo.dueDate ||
                                                               todo.createdAt
                                                           )
                                                         ) === "SUN"
-                                                          ? "border-emerald-300 dark:border-emerald-950"
-                                                          : ""
+                                                          ? "border-emerald-300 dark:border-emerald-950 bg-emerald-100/30 hover:bg-emerald-100/70 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/70"
+                                                          : "bg-white dark:bg-black hover:bg-zinc-50 dark:hover:bg-zinc-900"
                                                       } cursor-pointer`}
-                                                    />
-                                                  </div>
-                                                  <div className="flex flex-col">
-                                                    <span
-                                                      className={`${
-                                                        todo.completed
-                                                          ? "line-through text-muted-foreground"
-                                                          : ""
-                                                      } overflow-auto`}
+                                                      onClick={() =>
+                                                        setSelectedTodo(todo)
+                                                      }
                                                     >
-                                                      {todo.title.slice(0, 25)}
-                                                      ...
-                                                    </span>
-                                                    {todo.description && (
-                                                      <span className="text-sm text-muted-foreground">
-                                                        {todo.description}
-                                                      </span>
-                                                    )}
-                                                    <span className="text-xs text-muted-foreground">
-                                                      Due:{" "}
-                                                      {formatDateTime(
-                                                        todo.dueDate ||
-                                                          todo.createdAt
-                                                      )}
-                                                    </span>
-                                                    {todo.completed &&
-                                                      typeof todo.workHours ===
-                                                        "number" &&
-                                                      typeof todo.workCompletionPercentage ===
-                                                        "number" && (
-                                                        <span className="text-xs text-blue-500 font-semibold mt-1">
-                                                          {todo.workHours.toFixed(
-                                                            1
-                                                          )}{" "}
-                                                          hrs
-                                                        </span>
-                                                      )}
-                                                    {todo.completed &&
-                                                      (typeof todo.workHours ===
-                                                        "undefined" ||
-                                                        todo.workHours ===
-                                                          0) && (
-                                                        <span className="text-xs text-muted-foreground mt-1">
-                                                          0% Work
-                                                        </span>
-                                                      )}
-                                                  </div>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                  <Button
-                                                    variant="outline"
-                                                    size="icon"
-                                                    className={`flex-shrink-0 text-xs sm:text-sm border ${
-                                                      getDayInitial(
-                                                        new Date(
-                                                          todo.dueDate ||
-                                                            todo.createdAt
-                                                        )
-                                                      ) === "SUN"
-                                                        ? "border-emerald-300 dark:border-emerald-950"
-                                                        : ""
-                                                    } cursor-pointer`}
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      setTodoToDelete(todo);
-                                                    }}
-                                                  >
-                                                    <IoTrash className="h-4 w-4" />
-                                                  </Button>
-                                                </div>
-                                              </div>
-                                            </div>
-                                          </div>
-                                        ))
+                                                      <div className="flex items-ceneter w-full">
+                                                        <div
+                                                          className={`flex flex-col items-center justify-center text-white text-xs font-bold rounded-l-md w-12 ${getDayColor(getDayInitial(new Date(todo.dueDate || todo.createdAt)))}`}
+                                                        >
+                                                          <span className="text-base">
+                                                            {format(
+                                                              new Date(
+                                                                todo.dueDate ||
+                                                                  todo.createdAt
+                                                              ),
+                                                              "d"
+                                                            )}
+                                                          </span>
+                                                          {getDayInitial(
+                                                            new Date(
+                                                              todo.dueDate ||
+                                                                todo.createdAt
+                                                            )
+                                                          )}
+                                                        </div>
+                                                        <div className="flex items-center justify-between p-2 sm:p-3 w-full">
+                                                          <div className="flex items-center gap-2">
+                                                            <div
+                                                              onClick={(e) =>
+                                                                e.stopPropagation()
+                                                              }
+                                                            >
+                                                              <Checkbox
+                                                                checked={
+                                                                  todo.completed
+                                                                }
+                                                                onCheckedChange={(
+                                                                  checked
+                                                                ) => {
+                                                                  if (checked) {
+                                                                    setSelectedTodoForWorkHours(
+                                                                      todo
+                                                                    );
+                                                                    setShowWorkHoursDialog(
+                                                                      true
+                                                                    );
+                                                                  } else {
+                                                                    toggleTodo(
+                                                                      todo.id
+                                                                    );
+                                                                  }
+                                                                }}
+                                                                className={`border ${
+                                                                  getDayInitial(
+                                                                    new Date(
+                                                                      todo.dueDate ||
+                                                                        todo.createdAt
+                                                                    )
+                                                                  ) === "SUN"
+                                                                    ? "border-emerald-300 dark:border-emerald-950"
+                                                                    : ""
+                                                                } cursor-pointer`}
+                                                              />
+                                                            </div>
+                                                            <div className="flex flex-col">
+                                                              <span
+                                                                className={`${
+                                                                  todo.completed
+                                                                    ? "line-through text-muted-foreground"
+                                                                    : ""
+                                                                } overflow-auto`}
+                                                              >
+                                                                {todo.title
+                                                                  .length > 20
+                                                                  ? `${todo.title.slice(0, 20)}...`
+                                                                  : todo.title}
+                                                              </span>
+                                                              {todo.description && (
+                                                                <span className="text-sm text-muted-foreground">
+                                                                  {
+                                                                    todo.description
+                                                                  }
+                                                                </span>
+                                                              )}
+                                                              <span className="text-xs text-muted-foreground">
+                                                                Due :{" "}
+                                                                {formatDateTime(
+                                                                  todo.dueDate ||
+                                                                    todo.createdAt
+                                                                )}
+                                                                {todo.completed &&
+                                                                  typeof todo.workHours ===
+                                                                    "number" && (
+                                                                    <span className="text-blue-500 font-semibold">
+                                                                      {" "}
+                                                                      [
+                                                                      {todo.workHours.toFixed(
+                                                                        1
+                                                                      )}{" "}
+                                                                      hrs]
+                                                                    </span>
+                                                                  )}
+                                                                {todo.completed &&
+                                                                  (typeof todo.workHours ===
+                                                                    "undefined" ||
+                                                                    todo.workHours ===
+                                                                      0) && (
+                                                                    <span className="text-muted-foreground">
+                                                                      {" "}
+                                                                      [0% Work]
+                                                                    </span>
+                                                                  )}
+                                                              </span>
+                                                            </div>
+                                                          </div>
+                                                          <div className="flex items-center gap-2">
+                                                            <Button
+                                                              variant="outline"
+                                                              size="icon"
+                                                              className={`flex-shrink-0 text-xs sm:text-sm border ${
+                                                                getDayInitial(
+                                                                  new Date(
+                                                                    todo.dueDate ||
+                                                                      todo.createdAt
+                                                                  )
+                                                                ) === "SUN"
+                                                                  ? "border-emerald-300 dark:border-emerald-950"
+                                                                  : ""
+                                                              } cursor-pointer`}
+                                                              onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setTodoToDelete(
+                                                                  todo
+                                                                );
+                                                              }}
+                                                            >
+                                                              <IoTrash className="h-4 w-4" />
+                                                            </Button>
+                                                          </div>
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                  ))}
+                                                </React.Fragment>
+                                              );
+                                            }
+                                          );
+                                        })()
                                       ) : (
                                         <p className="text-center text-muted-foreground py-4 text-sm sm:text-base">
                                           No todos for this week
