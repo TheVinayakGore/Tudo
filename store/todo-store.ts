@@ -2,6 +2,17 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { toast } from "react-hot-toast";
 
+// Helper to format date for toast messages
+const formatToastDate = (date: Date | string | undefined) => {
+  if (!date) return "";
+  const d = new Date(date);
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
 // In your todo-store.ts (or wherever your store is defined)
 export interface Todo {
   id: string;
@@ -12,15 +23,24 @@ export interface Todo {
   completedAt?: Date | string;
   dueDate?: Date | string;
   dueTime?: string; // ✅ new field
+  workHours?: number; // ✅ new field
+  workCompletionPercentage?: number; // New field for work completion percentage
   subTodos?: Todo[]; // Add support for sub-todos
   parentId?: string; // Reference to parent todo if this is a sub-todo
   isPlaceholder?: boolean;
 }
 
+// Add helper function to calculate work completion percentage
+const calculateWorkCompletionPercentage = (workHours: number): number => {
+  const baselineHours = 12; // 12 hours baseline per day
+  const percentage = (workHours / baselineHours) * 100;
+  return Math.min(percentage, 100); // Cap at 100%
+};
+
 type TodoStore = {
   todos: Todo[];
   addTodo: (todo: Omit<Todo, "id">, parentId?: string) => void;
-  toggleTodo: (id: string) => void;
+  toggleTodo: (id: string, workHours?: number) => void;
   deleteTodo: (id: string) => void;
   updateTodo: (
     id: string,
@@ -37,6 +57,7 @@ type TodoStore = {
   deleteSubTodo: (todoId: string, subTodoId: string) => void;
   toggleSubTodo: (parentId: string, subTodoId: string) => void;
   updateSubTodo: (parentId: string, subTodoId: string, title: string) => void;
+  updateWorkHours: (id: string, workHours: number) => void; // New function
 };
 
 export const useTodoStore = create<TodoStore>()(
@@ -66,9 +87,8 @@ export const useTodoStore = create<TodoStore>()(
             todos: [...state.todos, newTodo],
           }));
         }
-        toast.success("Todo added!");
       },
-      toggleTodo: (id: string) => {
+      toggleTodo: (id: string, workHours?: number) => {
         set((state) => ({
           todos: state.todos.map((todo) =>
             todo.id === id
@@ -76,11 +96,16 @@ export const useTodoStore = create<TodoStore>()(
                   ...todo,
                   completed: !todo.completed,
                   completedAt: todo.completed ? undefined : new Date(),
+                  workHours: todo.completed ? undefined : workHours,
+                  workCompletionPercentage: todo.completed
+                    ? undefined
+                    : workHours
+                      ? calculateWorkCompletionPercentage(workHours)
+                      : undefined,
                 }
               : todo
           ),
         }));
-        toast.success("Todo updated!");
       },
       deleteTodo: (id: string) => {
         set((state) => ({
@@ -103,11 +128,10 @@ export const useTodoStore = create<TodoStore>()(
             todo.id === id ? { ...todo, ...updates } : todo
           ),
         }));
-        toast.success("Todo updated!");
       },
       clearAllTodos: () => {
         set({ todos: [] });
-        toast.success("All todos cleared!");
+        toast.success("All todos cleared !");
       },
       addSubTodo: (parentId: string, subTodo: Omit<Todo, "id">) => {
         const newSubTodo = {
@@ -115,21 +139,27 @@ export const useTodoStore = create<TodoStore>()(
           ...subTodo,
           parentId,
         };
-        set((state) => ({
-          todos: state.todos.map((todo) =>
+        set((state) => {
+          const updatedTodos = state.todos.map((todo) =>
             todo.id === parentId
               ? {
                   ...todo,
                   subTodos: [...(todo.subTodos || []), newSubTodo],
                 }
               : todo
-          ),
-        }));
-        toast.success("Sub-todo added!");
+          );
+          const parentTodo = updatedTodos.find((t) => t.id === parentId);
+          if (parentTodo) {
+            toast.success(
+              `Sub-todo added to todo on ${formatToastDate(parentTodo.dueDate || parentTodo.createdAt)}!`
+            );
+          }
+          return { todos: updatedTodos };
+        });
       },
       deleteSubTodo: (todoId: string, subTodoId: string) => {
-        set((state) => ({
-          todos: state.todos.map((todo) =>
+        set((state) => {
+          const updatedTodos = state.todos.map((todo) =>
             todo.id === todoId
               ? {
                   ...todo,
@@ -137,9 +167,15 @@ export const useTodoStore = create<TodoStore>()(
                     todo.subTodos?.filter((st) => st.id !== subTodoId) || [],
                 }
               : todo
-          ),
-        }));
-        toast.success("Sub-todo deleted!");
+          );
+          const parentTodo = updatedTodos.find((t) => t.id === todoId);
+          if (parentTodo) {
+            toast.success(
+              `Sub-todo deleted from todo on ${formatToastDate(parentTodo.dueDate || parentTodo.createdAt)}!`
+            );
+          }
+          return { todos: updatedTodos };
+        });
       },
       toggleSubTodo: (parentId: string, subTodoId: string) => {
         set((state) => {
@@ -183,13 +219,19 @@ export const useTodoStore = create<TodoStore>()(
             }
           }
 
+          const updatedParentTodo = updatedTodos.find((t) => t.id === parentId);
+          if (updatedParentTodo) {
+            toast.success(
+              `Sub-todo updated for todo on ${formatToastDate(updatedParentTodo.dueDate || updatedParentTodo.createdAt)}!`
+            );
+          }
+
           return { todos: updatedTodos };
         });
-        toast.success("Sub-todo updated!");
       },
       updateSubTodo: (parentId: string, subTodoId: string, title: string) => {
-        set((state) => ({
-          todos: state.todos.map((todo) =>
+        set((state) => {
+          const updatedTodos = state.todos.map((todo) =>
             todo.id === parentId
               ? {
                   ...todo,
@@ -203,9 +245,30 @@ export const useTodoStore = create<TodoStore>()(
                   ),
                 }
               : todo
+          );
+          const parentTodo = updatedTodos.find((t) => t.id === parentId);
+          if (parentTodo) {
+            toast.success(
+              `Sub-todo updated for todo on ${formatToastDate(parentTodo.dueDate || parentTodo.createdAt)}!`
+            );
+          }
+          return { todos: updatedTodos };
+        });
+      },
+      updateWorkHours: (id: string, workHours: number) => {
+        set((state) => ({
+          todos: state.todos.map((todo) =>
+            todo.id === id
+              ? {
+                  ...todo,
+                  workHours,
+                  workCompletionPercentage:
+                    calculateWorkCompletionPercentage(workHours),
+                }
+              : todo
           ),
         }));
-        toast.success("Sub-todo updated!");
+        toast.success(`Work hours updated! (${workHours} hours)`);
       },
     }),
     {

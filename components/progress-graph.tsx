@@ -17,6 +17,7 @@ import { useTheme } from "next-themes";
 import { Button } from "./ui/button";
 import { IoFilter } from "react-icons/io5";
 import Link from "next/link";
+import WorkHoursPieChart from "./WorkHoursPieChart";
 
 ChartJS.register(
   CategoryScale,
@@ -214,7 +215,8 @@ export default function ProgressGraph() {
         </section>
 
         <h2 className="text-start mx-auto text-2xl md:text-4xl font-bold w-full">
-          <span className="text-primary">{new Date().getFullYear()}</span> Progress 
+          <span className="text-primary">{new Date().getFullYear()}</span>{" "}
+          Progress
         </h2>
 
         <div className="bg-orange-50 dark:bg-orange-900/10 p-3 sm:p-10 rounded-lg border border-orange-300 dark:border-orange-950 w-full">
@@ -227,6 +229,8 @@ export default function ProgressGraph() {
             </div>
           </section>
         </div>
+
+        <WorkHoursPieChart todos={todos} />
       </main>
     </>
   );

@@ -16,7 +16,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
 import { useTodoStore } from "@/store/todo-store";
 import type { Todo } from "@/store/todo-store";
-import { cn } from "@/lib/utils";
 import { TfiControlBackward } from "react-icons/tfi";
 import {
   AlertDialog,
@@ -34,19 +33,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import MonthCard from "@/components/MonthCard";
+import TodoEntryForm from "@/components/TodoEntryForm";
+import NoteEntryForm from "@/components/NoteEntryForm";
+import TodoDetailDialog from "@/components/TodoDetailDialog";
+import WorkHoursDialog from "@/components/WorkHoursDialog";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { toast } from "react-hot-toast";
-import { Textarea } from "@/components/ui/textarea";
-import { VscEyeClosed } from "react-icons/vsc";
 
 // Add Note type and store
 type Note = {
@@ -74,19 +68,16 @@ const useNoteStore = create<NoteStore>()(
         set((state) => ({
           notes: [...state.notes, newNote],
         }));
-        toast.success("Note added!");
       },
       deleteNote: (id: string) => {
         set((state) => ({
           notes: state.notes.filter((note) => note.id !== id),
         }));
-        toast.success("Note deleted!");
       },
       editNote: (id: string, note: Omit<Note, "id">) => {
         set((state) => ({
           notes: state.notes.map((n) => (n.id === id ? { ...n, ...note } : n)),
         }));
-        toast.success("Note updated!");
       },
     }),
     {
@@ -104,6 +95,7 @@ const Todos = () => {
     deleteSubTodo,
     updateTodo,
     updateSubTodo,
+    updateWorkHours,
   } = useTodoStore();
   const { notes, addNote, deleteNote, editNote } = useNoteStore();
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
@@ -132,6 +124,14 @@ const Todos = () => {
     new Date()
   );
   const [showNoteForm, setShowNoteForm] = useState(false);
+  const [showWorkHoursDialog, setShowWorkHoursDialog] = useState(false);
+  const [selectedTodoForWorkHours, setSelectedTodoForWorkHours] =
+    useState<Todo | null>(null);
+
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear();
+  const currentMonthIndex = currentDate.getMonth();
+  const currentDayOfMonth = currentDate.getDate();
 
   // Add useEffect to save Todos state
   useEffect(() => {
@@ -547,23 +547,6 @@ const Todos = () => {
       )
     : sortedTodos;
 
-  // Add this function to handle subtodo editing
-  const handleEditSubTodo = (
-    todoId: string,
-    subTodoId: string,
-    currentTitle: string
-  ) => {
-    if (!editSubTodoText.trim()) {
-      toast.error("Please enter some text for your sub-todo!", {
-        duration: 3000,
-      });
-      return;
-    }
-
-    setEditingSubTodo({ todoId, subTodoId });
-    setEditSubTodoText(currentTitle);
-  };
-
   // Add this function to check for duplicate todos on the same date
   const hasTodoOnDate = (date: Date) => {
     return todos.some((todo) => {
@@ -674,6 +657,11 @@ const Todos = () => {
     return initials[adjustedDay];
   };
 
+  const handleWorkHoursSave = (todoId: string, hours: number) => {
+    updateWorkHours(todoId, hours);
+    toggleTodo(todoId, hours);
+  };
+
   return (
     <>
       <main id="todos" className="flex flex-col items-start gap-5 py-20 w-full">
@@ -771,71 +759,68 @@ const Todos = () => {
                     ? Math.round((completedCount / totalCount) * 100)
                     : 0;
 
-                const currentMonthIndex = new Date().getMonth();
+                // Calculate ideal completion percentage
+                const daysInMonth = new Date(
+                  currentYear,
+                  index + 1,
+                  0
+                ).getDate();
+
+                let totalBaselineHours = 0;
+                let completedWorkHours = 0;
+
+                if (index < currentMonthIndex) {
+                  // Past months: calculate ideal hours for the entire month
+                  totalBaselineHours = daysInMonth * 12; // Assuming 12 hours BASELINE_HOURS
+                } else if (index === currentMonthIndex) {
+                  // Current month: calculate ideal hours up to the current day
+                  totalBaselineHours = currentDayOfMonth * 12; // Accessing the top-level currentDayOfMonth
+                } else {
+                  // Future months: 0 ideal hours for now, or total for month if needed
+                  totalBaselineHours = 0; // Or daysInMonth * 12 if you want to show full potential
+                }
+
+                completedWorkHours = monthTodos.reduce((sum, todo) => {
+                  return (
+                    sum +
+                    (todo.completed && typeof todo.workHours === "number"
+                      ? todo.workHours
+                      : 0)
+                  );
+                }, 0);
+
+                const idealCompletionPercentage =
+                  totalBaselineHours > 0
+                    ? Math.round(
+                        (completedWorkHours / totalBaselineHours) * 100
+                      )
+                    : 0;
+
+                // Calculate average daily work hours for the month
+                const daysConsideredForAverage =
+                  index === currentMonthIndex ? currentDayOfMonth : daysInMonth;
+                const averageDailyWorkHours =
+                  daysConsideredForAverage > 0
+                    ? completedWorkHours / daysConsideredForAverage
+                    : 0;
+
                 const isPastMonth = index < currentMonthIndex;
 
                 return (
-                  <div
+                  <MonthCard
                     key={month}
-                    onClick={() => setSelectedMonth(month)}
-                    className={`group flex flex-col items-center justify-center gap-2 p-6 sm:p-8 rounded-2xl border hover:shadow-lg transition-all cursor-pointer h-[200px] ${
-                      isPastMonth
-                        ? "bg-orange-200/10 border-orange-500 dark:bg-orange-950/10 dark:border-orange-900"
-                        : "bg-white/60 hover:bg-orange-200 hover:border-orange-500 dark:bg-zinc-900/50 dark:hover:bg-orange-950/50 dark:hover:border-orange-800"
-                    }`}
-                  >
-                    <h3
-                      className={`text-xl font-semibold group-hover:scale-105 transition-transform duration-300 ${
-                        isPastMonth
-                          ? "text-zinc-500 dark:text-zinc-400"
-                          : "text-orange-600 dark:text-orange-400"
-                      }`}
-                    >
-                      {month}
-                    </h3>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center">
-                      {totalCount} todos{" "}
-                      <span className="text-red-500 dark:text-red-400">
-                        {pendingCount} pending
-                      </span>
-                      <br />{" "}
-                      <span className="text-green-600 dark:text-green-400">
-                        {completedCount} completed
-                      </span>{" "}
-                      <span className="text-purple-500">
-                        {noteCount} note{noteCount !== 1 ? "s" : ""}
-                      </span>
-                    </p>
-
-                    {totalCount > 0 ? (
-                      <>
-                        <div className="w-full bg-zinc-200 dark:bg-zinc-800 rounded-full h-2 mt-1">
-                          <div
-                            className="bg-green-500 h-2 rounded-full transition-all"
-                            style={{
-                              width: `${completionPercentage}%`,
-                            }}
-                          />
-                        </div>
-                        <p
-                          className={cn(
-                            "text-xl font-bold mt-1",
-                            completionPercentage < 50
-                              ? "text-red-500"
-                              : completionPercentage < 90
-                                ? "text-yellow-500"
-                                : "text-green-500"
-                          )}
-                        >
-                          {completionPercentage}% completed
-                        </p>
-                      </>
-                    ) : isPastMonth ? (
-                      <p className="opacity-50 uppercase text-2xl font-normal">
-                        No work Done !
-                      </p>
-                    ) : null}
-                  </div>
+                    month={month}
+                    index={index}
+                    totalCount={totalCount}
+                    pendingCount={pendingCount}
+                    completedCount={completedCount}
+                    noteCount={noteCount}
+                    completionPercentage={completionPercentage}
+                    idealCompletionPercentage={idealCompletionPercentage}
+                    averageDailyWorkHours={averageDailyWorkHours}
+                    isPastMonth={isPastMonth}
+                    setSelectedMonth={setSelectedMonth}
+                  />
                 );
               })}
             </div>
@@ -855,207 +840,39 @@ const Todos = () => {
                     <IoAdd className="h-4 w-4" /> Add Note
                   </Button>
                   {showNoteForm && (
-                    <div className="flex flex-col lg:flex-row items-start justify-between gap-3 w-full">
-                      <div className="flex flex-col items-end relative w-full">
-                        <Textarea
-                          value={newNoteText}
-                          onChange={(e) => setNewNoteText(e.target.value)}
-                          placeholder="Add a note for this month..."
-                          rows={1}
-                          className="border-primary/30 w-full"
-                        />
-                        <Button
-                          size="sm"
-                          onClick={handleAddNote}
-                          className="absolute bottom-0 right-0 m-2 text-xs w-auto"
-                        >
-                          Save Note
-                        </Button>
-                      </div>
-
-                      <div className="flex flex-col gap-3 w-full lg:w-1/3">
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className="justify-start text-left font-normal w-full"
-                            >
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {newNoteDate
-                                ? format(newNoteDate, "PPP")
-                                : "Pick a date"}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="border border-primary/30 overflow-hidden rounded-md w-auto mt-2 z-50">
-                            <Calendar
-                              mode="single"
-                              selected={newNoteDate}
-                              onSelect={(date: Date | undefined) =>
-                                setNewNoteDate(date)
-                              }
-                              initialFocus
-                              defaultMonth={getDefaultMonth()}
-                            />
-                          </PopoverContent>
-                        </Popover>
-
-                        {showNoteForm && (
-                          <Button onClick={handleNoteFormClose}>
-                            Hide Form
-                            <VscEyeClosed className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
+                    <NoteEntryForm
+                      newNoteText={newNoteText}
+                      setNewNoteText={setNewNoteText}
+                      newNoteDate={newNoteDate}
+                      setNewNoteDate={setNewNoteDate}
+                      handleAddNote={handleAddNote}
+                      handleNoteFormClose={handleNoteFormClose}
+                      getDefaultMonth={getDefaultMonth}
+                      showNoteForm={showNoteForm}
+                    />
                   )}
                 </div>
               </div>
               <div className="flex flex-col gap-3 my-5 w-full">
                 {/* Add Todo Form */}
                 {selectedMonth && !isMonthExpired(selectedMonth) ? (
-                  <div className="flex flex-col gap-4 w-full">
-                    <div className="flex flex-col md:flex-row gap-2 w-full">
-                      <div className="flex gap-2 w-full md:w-1/3">
-                        <Input
-                          value={newTodoText}
-                          onChange={(e) => setNewTodoText(e.target.value)}
-                          placeholder="Add new todo..."
-                          className="w-full"
-                          onKeyDown={(e) =>
-                            e.key === "Enter" && handleAddTodo()
-                          }
-                          required
-                        />
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="flex-shrink-0 text-xs sm:text-sm"
-                          onClick={() => setShowSubTodoForm(!showSubTodoForm)}
-                        >
-                          {showSubTodoForm ? "▼" : "▶"}
-                        </Button>
-                      </div>
-
-                      <Input
-                        value={newTodoDesc}
-                        onChange={(e) => setNewTodoDesc(e.target.value)}
-                        placeholder="Add description (optional)"
-                        className="flex-1"
-                      />
-
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="flex-1 justify-start text-left font-normal"
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {newTodoDate ? (
-                              format(newTodoDate, "PPP")
-                            ) : (
-                              <span>Pick a date</span>
-                            )}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="border border-primary/30 overflow-hidden rounded-md w-auto mt-2 z-50">
-                          <Calendar
-                            mode="single"
-                            selected={newTodoDate}
-                            onSelect={(date: Date | undefined) =>
-                              setNewTodoDate(date)
-                            }
-                            initialFocus
-                            defaultMonth={getDefaultMonth()}
-                            disabled={(date) => {
-                              const today = new Date();
-                              today.setHours(0, 0, 0, 0);
-                              return date < today;
-                            }}
-                          />
-                        </PopoverContent>
-                      </Popover>
-
-                      <Button onClick={handleAddTodo} className="flex-1 gap-1">
-                        <IoAdd className="h-4 w-4" />{" "}
-                        {editingTodo ? "Update" : "Add"}
-                      </Button>
-                    </div>
-
-                    {/* Sub-todos form section */}
-                    {showSubTodoForm && (
-                      <div className="flex flex-col gap-2 p-3 rounded-md border bg-white dark:bg-black">
-                        {subTodoInputs.map((input, index) => (
-                          <div key={index} className="flex gap-2">
-                            <Input
-                              value={input}
-                              onChange={(e) => {
-                                const newInputs = [...subTodoInputs];
-                                newInputs[index] = e.target.value;
-                                setSubTodoInputs(newInputs);
-                              }}
-                              placeholder="Add sub-todo..."
-                              className="flex-1"
-                              onKeyDown={(e) => {
-                                if (
-                                  e.key === "Enter" &&
-                                  input.trim() &&
-                                  newTodoText.trim()
-                                ) {
-                                  const newTodo = {
-                                    title: newTodoText,
-                                    description: newTodoDesc,
-                                    completed: false,
-                                    createdAt: new Date(),
-                                    dueDate: newTodoDate,
-                                    subTodos: subTodoInputs
-                                      .filter((subTodo) => subTodo.trim())
-                                      .map((subTodo) => ({
-                                        id:
-                                          Date.now().toString() + Math.random(),
-                                        title: subTodo,
-                                        completed: false,
-                                        createdAt: new Date(),
-                                      })),
-                                  };
-                                  addTodo(newTodo);
-                                  setSubTodoInputs([""]);
-                                  setNewTodoText("");
-                                  setNewTodoDesc("");
-                                  setNewTodoDate(new Date());
-                                  setShowSubTodoForm(false);
-                                }
-                              }}
-                            />
-                            {index === subTodoInputs.length - 1 ? (
-                              <Button
-                                size="icon"
-                                className="flex-shrink-0 text-xs sm:text-sm"
-                                onClick={() =>
-                                  setSubTodoInputs([...subTodoInputs, ""])
-                                }
-                              >
-                                <IoAdd className="h-4 w-4" />
-                              </Button>
-                            ) : (
-                              <Button
-                                size="icon"
-                                variant="outline"
-                                className="flex-shrink-0 text-xs sm:text-sm"
-                                onClick={() => {
-                                  const newInputs = subTodoInputs.filter(
-                                    (_, i) => i !== index
-                                  );
-                                  setSubTodoInputs(newInputs);
-                                }}
-                              >
-                                <IoTrash className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <TodoEntryForm
+                    newTodoText={newTodoText}
+                    setNewTodoText={setNewTodoText}
+                    newTodoDesc={newTodoDesc}
+                    setNewTodoDesc={setNewTodoDesc}
+                    newTodoDate={newTodoDate}
+                    setNewTodoDate={setNewTodoDate}
+                    showSubTodoForm={showSubTodoForm}
+                    setShowSubTodoForm={setShowSubTodoForm}
+                    subTodoInputs={subTodoInputs}
+                    setSubTodoInputs={setSubTodoInputs}
+                    handleAddTodo={handleAddTodo}
+                    editingTodo={!!editingTodo}
+                    getDefaultMonth={getDefaultMonth}
+                    isMonthExpired={isMonthExpired}
+                    selectedMonth={selectedMonth}
+                  />
                 ) : selectedMonth && isMonthExpired(selectedMonth) ? (
                   <div className="p-4 bg-zinc-100 dark:bg-zinc-800 rounded-md text-center">
                     <p className="text-zinc-600 dark:text-zinc-400">
@@ -1156,6 +973,18 @@ const Todos = () => {
                             return null;
 
                           const expired = isWeekExpired(weekIndex, weekTodos);
+                          const totalWorkHours = weekTodos.reduce(
+                            (sum, todo) => {
+                              return (
+                                sum +
+                                (todo.completed && todo.workHours
+                                  ? todo.workHours
+                                  : 0)
+                              );
+                            },
+                            0
+                          );
+
                           return (
                             <TooltipProvider key={weekIndex}>
                               <Tooltip>
@@ -1185,6 +1014,40 @@ const Todos = () => {
                                             .length
                                         }{" "}
                                         completed
+                                        {((
+                                          completedWorkHoursInWeek,
+                                          expired
+                                        ) => {
+                                          const IDEAL_WEEK_HOURS = 84; // 12 hours/day * 7 days
+                                          const percentageWorkDone =
+                                            IDEAL_WEEK_HOURS > 0
+                                              ? (completedWorkHoursInWeek /
+                                                  IDEAL_WEEK_HOURS) *
+                                                100
+                                              : 0;
+
+                                          if (completedWorkHoursInWeek > 0) {
+                                            return (
+                                              <span className="ml-2 text-xs font-semibold text-blue-500">
+                                                {"(" +
+                                                  completedWorkHoursInWeek +
+                                                  " hrs & " +
+                                                  percentageWorkDone.toFixed(
+                                                    1
+                                                  ) +
+                                                  "% hrs)".replace(
+                                                    /'/g,
+                                                    "&apos;"
+                                                  )}
+                                              </span>
+                                            );
+                                          } else if (expired) {
+                                            return (
+                                              ""
+                                            );
+                                          }
+                                          return null;
+                                        })(totalWorkHours, expired)}
                                       </p>
                                     </div>
 
@@ -1219,6 +1082,7 @@ const Todos = () => {
                                                     ),
                                                     "d"
                                                   )}
+                                                  
                                                 </span>
                                                 {getDayInitial(
                                                   new Date(
@@ -1226,6 +1090,7 @@ const Todos = () => {
                                                       todo.createdAt
                                                   )
                                                 )}
+                                                
                                               </div>
                                               <div className="flex items-center justify-between p-2 sm:p-3 w-full">
                                                 <div className="flex items-center gap-2">
@@ -1236,9 +1101,20 @@ const Todos = () => {
                                                   >
                                                     <Checkbox
                                                       checked={todo.completed}
-                                                      onCheckedChange={() =>
-                                                        toggleTodo(todo.id)
-                                                      }
+                                                      onCheckedChange={(
+                                                        checked
+                                                      ) => {
+                                                        if (checked) {
+                                                          setSelectedTodoForWorkHours(
+                                                            todo
+                                                          );
+                                                          setShowWorkHoursDialog(
+                                                            true
+                                                          );
+                                                        } else {
+                                                          toggleTodo(todo.id);
+                                                        }
+                                                      }}
                                                       className={`border ${
                                                         getDayInitial(
                                                           new Date(
@@ -1274,6 +1150,27 @@ const Todos = () => {
                                                           todo.createdAt
                                                       )}
                                                     </span>
+                                                    {todo.completed &&
+                                                      typeof todo.workHours ===
+                                                        "number" &&
+                                                      typeof todo.workCompletionPercentage ===
+                                                        "number" && (
+                                                        <span className="text-xs text-blue-500 font-semibold mt-1">
+                                                          {todo.workHours.toFixed(
+                                                            1
+                                                          )}{" "}
+                                                          hrs
+                                                        </span>
+                                                      )}
+                                                    {todo.completed &&
+                                                      (typeof todo.workHours ===
+                                                        "undefined" ||
+                                                        todo.workHours ===
+                                                          0) && (
+                                                        <span className="text-xs text-muted-foreground mt-1">
+                                                          0% Work
+                                                        </span>
+                                                      )}
                                                   </div>
                                                 </div>
                                                 <div className="flex items-center gap-2">
@@ -1449,6 +1346,21 @@ const Todos = () => {
           )}
         </ScrollArea>
 
+        <TodoDetailDialog
+          selectedTodo={selectedTodo}
+          setSelectedTodo={setSelectedTodo}
+          handleEditTodo={handleEditTodo}
+          setTodoToDelete={setTodoToDelete}
+          editingSubTodo={editingSubTodo}
+          setEditingSubTodo={setEditingSubTodo}
+          editSubTodoText={editSubTodoText}
+          setEditSubTodoText={setEditSubTodoText}
+          updateSubTodo={updateSubTodo}
+          deleteSubTodo={deleteSubTodo}
+          deleteTodo={deleteTodo}
+          formatDateTime={formatDateTime}
+        />
+
         <AlertDialog
           open={!!todoToDelete}
           onOpenChange={() => setTodoToDelete(null)}
@@ -1509,247 +1421,15 @@ const Todos = () => {
           </AlertDialogContent>
         </AlertDialog>
 
-        <Dialog
-          open={!!selectedTodo}
-          onOpenChange={() => setSelectedTodo(null)}
-        >
-          <DialogContent className="sm:max-w-2xl">
-            <DialogHeader className="pb-3 border-b">
-              <DialogTitle className="flex items-center justify-between w-full">
-                <div className="flex flex-col gap-2 text-start leading-none">
-                  <span className="text-xl font-semibold leading-none">
-                    Todo Details
-                  </span>
-                  <Badge
-                    variant="secondary"
-                    className={`${selectedTodo?.completed ? "bg-green-500" : "bg-blue-500"} text-xs text-white rounded uppercase`}
-                  >
-                    {selectedTodo?.completed ? "Completed" : "Pending"}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground font-normal">
-                    {formatDateTime(selectedTodo?.createdAt || new Date())}
-                  </span>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSelectedTodo(null);
-                      if (selectedTodo) {
-                        handleEditTodo(selectedTodo);
-                      }
-                    }}
-                    className="gap-2"
-                  >
-                    <FiEdit3 className="h-4 w-4" />
-                    Edit
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setSelectedTodo(null);
-                      setTodoToDelete(selectedTodo);
-                    }}
-                    className="gap-2 bg-red-500 hover:bg-red-600"
-                  >
-                    <IoTrash className="h-4 w-4" />
-                    Delete
-                  </Button>
-                </div>
-              </DialogTitle>
-            </DialogHeader>
-            {selectedTodo && (
-              <div className="grid gap-4 pb-4 overflow-auto max-h-[30rem]">
-                <div className="space-y-2">
-                  <h4 className="font-medium text-sm text-muted-foreground">
-                    Title
-                  </h4>
-                  <p className="text-sm font-medium">{selectedTodo.title}</p>
-                </div>
-
-                <Separator />
-
-                {selectedTodo.description &&
-                  selectedTodo.description.trim() !== "" && (
-                    <>
-                      <div className="space-y-2">
-                        <h4 className="font-medium text-sm text-muted-foreground">
-                          Description
-                        </h4>
-                        <p className="text-base whitespace-pre-wrap">
-                          {selectedTodo.description}
-                        </p>
-                      </div>
-                      <Separator />
-                    </>
-                  )}
-
-                <div className="space-y-2">
-                  <h4 className="font-medium text-sm text-muted-foreground">
-                    Due Date
-                  </h4>
-                  <b className="text-sm uppercase text-primary">
-                    {formatDateTime(
-                      selectedTodo?.dueDate || selectedTodo?.createdAt
-                    )}
-                  </b>
-                </div>
-
-                <Separator />
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-medium text-sm text-muted-foreground">
-                      Sub-todos ({selectedTodo.subTodos?.length || 0})
-                    </h4>
-                  </div>
-                  <div className="space-y-2">
-                    {selectedTodo.subTodos &&
-                    selectedTodo.subTodos.length > 0 ? (
-                      selectedTodo.subTodos.map((subTodo) => (
-                        <div
-                          key={subTodo.id}
-                          className="flex flex-col gap-2 p-3 border rounded-md bg-muted/30 relative"
-                        >
-                          <div className="flex items-center gap-2">
-                            {editingSubTodo?.subTodoId === subTodo.id ? (
-                              <div className="flex-1 flex gap-2">
-                                <Input
-                                  value={editSubTodoText}
-                                  onChange={(e) => {
-                                    const newText = e.target.value;
-                                    setEditSubTodoText(newText);
-                                    // Update the selectedTodo to reflect the edit immediately
-                                    setSelectedTodo((prev) => {
-                                      if (!prev) return null;
-                                      return {
-                                        ...prev,
-                                        subTodos:
-                                          prev.subTodos?.map((st) =>
-                                            st.id === subTodo.id
-                                              ? { ...st, title: newText }
-                                              : st
-                                          ) || [],
-                                      };
-                                    });
-                                  }}
-                                  className="flex-1"
-                                  onKeyDown={(e) => {
-                                    if (
-                                      e.key === "Enter" &&
-                                      editSubTodoText.trim()
-                                    ) {
-                                      updateSubTodo(
-                                        selectedTodo.id,
-                                        subTodo.id,
-                                        editSubTodoText
-                                      );
-                                      setEditingSubTodo(null);
-                                      setEditSubTodoText("");
-                                    }
-                                  }}
-                                />
-                                <Button
-                                  size="sm"
-                                  onClick={() => {
-                                    if (editSubTodoText.trim()) {
-                                      updateSubTodo(
-                                        selectedTodo.id,
-                                        subTodo.id,
-                                        editSubTodoText
-                                      );
-                                      setEditingSubTodo(null);
-                                      setEditSubTodoText("");
-                                    }
-                                  }}
-                                >
-                                  Save
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    setEditingSubTodo(null);
-                                    setEditSubTodoText("");
-                                  }}
-                                >
-                                  Cancel
-                                </Button>
-                              </div>
-                            ) : (
-                              <>
-                                <span className="flex-1 font-medium">
-                                  {subTodo.title}
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="flex-shrink-0 text-xs sm:text-sm"
-                                    onClick={() =>
-                                      handleEditSubTodo(
-                                        selectedTodo.id,
-                                        subTodo.id,
-                                        subTodo.title
-                                      )
-                                    }
-                                  >
-                                    <FiEdit3 className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="flex-shrink-0 text-xs sm:text-sm"
-                                    onClick={() => {
-                                      if (selectedTodo) {
-                                        deleteSubTodo(
-                                          selectedTodo.id,
-                                          subTodo.id
-                                        );
-                                        // Update the selectedTodo to reflect the deletion immediately
-                                        setSelectedTodo((prev) => {
-                                          if (!prev) return null;
-                                          const updatedSubTodos =
-                                            prev.subTodos?.filter(
-                                              (st) => st.id !== subTodo.id
-                                            ) || [];
-
-                                          // If this was the last subtodo, close the dialog and delete the main todo
-                                          if (updatedSubTodos.length === 0) {
-                                            setTimeout(() => {
-                                              setSelectedTodo(null);
-                                              deleteTodo(prev.id);
-                                            }, 100);
-                                          }
-
-                                          return {
-                                            ...prev,
-                                            subTodos: updatedSubTodos,
-                                          };
-                                        });
-                                      }
-                                    }}
-                                  >
-                                    <IoTrash className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-center py-4 text-muted-foreground text-sm">
-                        No subtodos added yet
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
+        <WorkHoursDialog
+          open={showWorkHoursDialog}
+          onClose={() => {
+            setShowWorkHoursDialog(false);
+            setSelectedTodoForWorkHours(null);
+          }}
+          onSave={handleWorkHoursSave}
+          todo={selectedTodoForWorkHours}
+        />
       </main>
     </>
   );
